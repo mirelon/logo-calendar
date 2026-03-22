@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="sk">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendar PDF Generator</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .screen-only {
+      margin-bottom: 1.5rem;
+    }
+
+    #downloadBtn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 14px 40px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #downloadBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(102, 126, 234, 0.55);
+    }
+
+    #downloadBtn:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+    }
+
+    #downloadBtn::before {
+      content: '📄';
+      font-size: 18px;
+    }
+
+    #calendar-wrapper {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+      padding: 1.5rem;
+      width: fit-content;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: separate;
+      border-spacing: 4px;
+    }
+
+    td.day {
+      border: 1px solid #222;
+      width: 120px;
+      height: 80px;
+      text-align: left;
+      vertical-align: top;
+      padding: 8px 10px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    td.weekend {
+      background: rgba(220, 50, 50, 0.06);
+    }
+
+    td.empty {
+      border: none;
+      width: 120px;
+      height: 80px;
+    }
+
+    td.month-title {
+      border: none;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      height: 40px;
+      color: #1a1a2e;
+      background: transparent;
+    }
+
+    /* ── Print styles ── */
+    @media print {
+
+      html,
+      body {
+        background: white;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        display: block;
+        overflow: hidden;
+      }
+
+      .screen-only {
+        display: none !important;
+      }
+
+      #calendar-wrapper {
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      table {
+        width: 100%;
+        height: 100%;
+        table-layout: fixed;
+      }
+
+      td.day {
+        width: auto;
+        height: auto;
+        padding: 6px 8px;
+        font-size: 13pt;
+      }
+
+      td.empty {
+        width: auto;
+        height: auto;
+      }
+
+      td.month-title {
+        font-size: 15pt;
+        height: 30px;
+      }
+
+      td.weekend {
+        background: rgba(220, 50, 50, 0.06) !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="screen-only">
+    <button id="downloadBtn">Download PDF</button>
+  </div>
+
+  <div id="calendar-wrapper">
+    <table id="calendar"></table>
+  </div>
+
+  <script>
+    const MONTHS_SK = [
+      'JANUÁR', 'FEBRUÁR', 'MAREC', 'APRÍL', 'MÁJ', 'JÚN',
+      'JÚL', 'AUGUST', 'SEPTEMBER', 'OKTÓBER', 'NOVEMBER', 'DECEMBER'
+    ];
+
+    /**
+     * Convert JS getDay() (Sun=0 … Sat=6)
+     * to Mon=0, Tue=1, … Sun=6
+     */
+    function getDow(date) {
+      return (date.getDay() + 6) % 7;
+    }
+
+    function addDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+
+    function buildCalendar() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const startCol = getDow(today); // 0-based column for today
+      const table = document.getElementById('calendar');
+      table.innerHTML = '';
+
+      let currentDate = new Date(today);
+      let row = 0;
+      let col = 0;
+      let lastTitleMonth = today.getMonth(); // current month title emitted below
+
+      // ── Current month title as the first row ──
+      const titleRow = document.createElement('tr');
+      const titleTd0 = document.createElement('td');
+      titleTd0.colSpan = 7;
+      titleTd0.classList.add('month-title');
+      titleTd0.textContent = MONTHS_SK[today.getMonth()];
+      titleRow.appendChild(titleTd0);
+      table.appendChild(titleRow);
+
+      // ── First day row: empty cells before today ──
+      let tr = document.createElement('tr');
+      for (let c = 0; c < startCol; c++) {
+        const td = document.createElement('td');
+        td.classList.add('empty');
+        tr.appendChild(td);
+        col++;
+      }
+
+      // ── Fill the 5-row grid (day rows only; title rows are extra) ──
+      while (row < 6) {
+        const monthIdx = currentDate.getMonth();
+        const isFirstCell = (row === 0 && col === startCol);
+
+        if (currentDate.getDate() === 1 && !isFirstCell && lastTitleMonth !== monthIdx) {
+          lastTitleMonth = monthIdx;
+
+          // If mid-row, pad remaining cells with empties and close the row
+          if (col > 0) {
+            while (col < 7) {
+              const etd = document.createElement('td');
+              etd.classList.add('empty');
+              tr.appendChild(etd);
+              col++;
+            }
+            table.appendChild(tr);
+            row++;
+            if (row >= 6) break;
+          }
+
+          // Insert a dedicated title row (does NOT count as a day row)
+          tr = document.createElement('tr');
+          const titleTd = document.createElement('td');
+          titleTd.colSpan = 7;
+          titleTd.classList.add('month-title');
+          titleTd.textContent = MONTHS_SK[monthIdx];
+          tr.appendChild(titleTd);
+          table.appendChild(tr);
+
+          // Start a new day row; place day 1 at its correct weekday column
+          tr = document.createElement('tr');
+          col = 0;
+          const newDow = getDow(currentDate);
+          for (let c = 0; c < newDow; c++) {
+            const etd = document.createElement('td');
+            etd.classList.add('empty');
+            tr.appendChild(etd);
+            col++;
+          }
+          continue;
+        }
+
+        // Normal day cell
+        const td = document.createElement('td');
+        td.textContent = currentDate.getDate();
+        td.classList.add('day');
+        if (col >= 5) td.classList.add('weekend'); // Sat (5) & Sun (6)
+        tr.appendChild(td);
+
+        currentDate = addDays(currentDate, 1);
+        col++;
+
+        if (col >= 7) {
+          table.appendChild(tr);
+          row++;
+          if (row < 6) {
+            tr = document.createElement('tr');
+            col = 0;
+          }
+        }
+      }
+    }
+
+    document.getElementById('downloadBtn').addEventListener('click', function () {
+      window.print();
+    });
+
+    buildCalendar();
+  </script>
+
+</body>
+
+</html>

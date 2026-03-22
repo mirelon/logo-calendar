@@ -271,13 +271,9 @@
       container.innerHTML = '';
 
       const year = today.getFullYear();
-      const month = today.getMonth();
 
-      // Current month + next 2
-      for (let i = 0; i < 3; i++) {
-        const m = (month + i) % 12;
-        const y = year + Math.floor((month + i) / 12);
-        container.appendChild(buildMonthPage(y, m));
+      for (let m = 0; m < 12; m++) {
+        container.appendChild(buildMonthPage(year, m));
       }
     }
 

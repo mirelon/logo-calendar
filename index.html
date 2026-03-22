@@ -24,7 +24,6 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       padding: 2rem;
     }
 
@@ -64,14 +63,25 @@
       font-size: 18px;
     }
 
-    #calendar-wrapper {
+    /* ── Month page ── */
+    .month-page {
       background: white;
       border-radius: 12px;
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
       padding: 1.5rem;
+      margin-bottom: 1.5rem;
       width: fit-content;
       max-width: 100%;
       overflow-x: auto;
+    }
+
+    .month-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #1a1a2e;
+      padding: 8px 0 12px;
     }
 
     table {
@@ -101,18 +111,6 @@
       height: 80px;
     }
 
-    td.month-title {
-      border: none;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 3px;
-      height: 40px;
-      color: #1a1a2e;
-      background: transparent;
-    }
-
     /* ── Print styles ── */
     @media print {
 
@@ -120,31 +118,45 @@
       body {
         background: white;
         width: 100%;
-        height: 100%;
+        height: auto;
         padding: 0;
         margin: 0;
         display: block;
-        overflow: hidden;
       }
 
       .screen-only {
         display: none !important;
       }
 
-      #calendar-wrapper {
+      .month-page {
         box-shadow: none;
         border-radius: 0;
         padding: 0;
+        margin: 0;
         width: 100%;
-        height: 100%;
+        height: 190mm;
+        /* 210mm A4 height − 2 × 10mm page margin */
         display: flex;
-        align-items: stretch;
-        justify-content: stretch;
+        flex-direction: column;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+
+      .month-page:last-child {
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+
+      .month-title {
+        font-size: 16pt;
+        padding: 0 0 4px;
+        flex-shrink: 0;
       }
 
       table {
         width: 100%;
-        height: 100%;
+        flex: 1;
         table-layout: fixed;
       }
 
@@ -158,11 +170,6 @@
       td.empty {
         width: auto;
         height: auto;
-      }
-
-      td.month-title {
-        font-size: 15pt;
-        height: 30px;
       }
 
       td.weekend {
@@ -180,9 +187,7 @@
     <button id="downloadBtn">Download PDF</button>
   </div>
 
-  <div id="calendar-wrapper">
-    <table id="calendar"></table>
-  </div>
+  <div id="calendar-container"></div>
 
   <script>
     const MONTHS_SK = [
@@ -190,112 +195,89 @@
       'JÚL', 'AUGUST', 'SEPTEMBER', 'OKTÓBER', 'NOVEMBER', 'DECEMBER'
     ];
 
-    /**
-     * Convert JS getDay() (Sun=0 … Sat=6)
-     * to Mon=0, Tue=1, … Sun=6
-     */
+    /** Mon=0, Tue=1, … Sun=6 */
     function getDow(date) {
       return (date.getDay() + 6) % 7;
     }
 
-    function addDays(date, n) {
-      const d = new Date(date);
-      d.setDate(d.getDate() + n);
-      return d;
+    /** Number of days in a given month (0-indexed month) */
+    function daysInMonth(year, month) {
+      return new Date(year, month + 1, 0).getDate();
     }
 
-    function buildCalendar() {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    /** Build one month page: title + grid from day 1 to last day */
+    function buildMonthPage(year, month) {
+      const page = document.createElement('div');
+      page.classList.add('month-page');
 
-      const startCol = getDow(today); // 0-based column for today
-      const table = document.getElementById('calendar');
-      table.innerHTML = '';
+      // ── Title ──
+      const title = document.createElement('div');
+      title.classList.add('month-title');
+      title.textContent = MONTHS_SK[month];
+      page.appendChild(title);
 
-      let currentDate = new Date(today);
-      let row = 0;
+      // ── Table ──
+      const table = document.createElement('table');
+      const totalDays = daysInMonth(year, month);
+      const firstDow = getDow(new Date(year, month, 1)); // 0=Mon … 6=Sun
+
       let col = 0;
-      let lastTitleMonth = today.getMonth(); // current month title emitted below
-
-      // ── Current month title as the first row ──
-      const titleRow = document.createElement('tr');
-      const titleTd0 = document.createElement('td');
-      titleTd0.colSpan = 7;
-      titleTd0.classList.add('month-title');
-      titleTd0.textContent = MONTHS_SK[today.getMonth()];
-      titleRow.appendChild(titleTd0);
-      table.appendChild(titleRow);
-
-      // ── First day row: empty cells before today ──
       let tr = document.createElement('tr');
-      for (let c = 0; c < startCol; c++) {
+
+      // Empty cells before day 1
+      for (let c = 0; c < firstDow; c++) {
         const td = document.createElement('td');
         td.classList.add('empty');
         tr.appendChild(td);
         col++;
       }
 
-      // ── Fill the 5-row grid (day rows only; title rows are extra) ──
-      while (row < 6) {
-        const monthIdx = currentDate.getMonth();
-        const isFirstCell = (row === 0 && col === startCol);
-
-        if (currentDate.getDate() === 1 && !isFirstCell && lastTitleMonth !== monthIdx) {
-          lastTitleMonth = monthIdx;
-
-          // If mid-row, pad remaining cells with empties and close the row
-          if (col > 0) {
-            while (col < 7) {
-              const etd = document.createElement('td');
-              etd.classList.add('empty');
-              tr.appendChild(etd);
-              col++;
-            }
-            table.appendChild(tr);
-            row++;
-            if (row >= 6) break;
-          }
-
-          // Insert a dedicated title row (does NOT count as a day row)
-          tr = document.createElement('tr');
-          const titleTd = document.createElement('td');
-          titleTd.colSpan = 7;
-          titleTd.classList.add('month-title');
-          titleTd.textContent = MONTHS_SK[monthIdx];
-          tr.appendChild(titleTd);
-          table.appendChild(tr);
-
-          // Start a new day row; place day 1 at its correct weekday column
-          tr = document.createElement('tr');
-          col = 0;
-          const newDow = getDow(currentDate);
-          for (let c = 0; c < newDow; c++) {
-            const etd = document.createElement('td');
-            etd.classList.add('empty');
-            tr.appendChild(etd);
-            col++;
-          }
-          continue;
-        }
-
-        // Normal day cell
+      // Day cells
+      for (let day = 1; day <= totalDays; day++) {
         const td = document.createElement('td');
-        td.textContent = currentDate.getDate();
+        td.textContent = day;
         td.classList.add('day');
-        if (col >= 5) td.classList.add('weekend'); // Sat (5) & Sun (6)
+        if (col >= 5) td.classList.add('weekend');
         tr.appendChild(td);
-
-        currentDate = addDays(currentDate, 1);
         col++;
 
         if (col >= 7) {
           table.appendChild(tr);
-          row++;
-          if (row < 6) {
+          if (day < totalDays) {
             tr = document.createElement('tr');
             col = 0;
           }
         }
+      }
+
+      // Pad last row with empties if needed
+      if (col > 0 && col < 7) {
+        while (col < 7) {
+          const td = document.createElement('td');
+          td.classList.add('empty');
+          tr.appendChild(td);
+          col++;
+        }
+        table.appendChild(tr);
+      }
+
+      page.appendChild(table);
+      return page;
+    }
+
+    function buildCalendar() {
+      const today = new Date();
+      const container = document.getElementById('calendar-container');
+      container.innerHTML = '';
+
+      const year = today.getFullYear();
+      const month = today.getMonth();
+
+      // Current month + next 2
+      for (let i = 0; i < 3; i++) {
+        const m = (month + i) % 12;
+        const y = year + Math.floor((month + i) / 12);
+        container.appendChild(buildMonthPage(y, m));
       }
     }
 
